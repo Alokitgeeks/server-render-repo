@@ -102,3 +102,45 @@ app.get("/", (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
+app.get('/api/orders/check', async (req, res) => {
+  try {
+    const { limit = 5, hours = 2 } = req.query;
+
+    const sinceTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
+
+    const response = await axios.get(url, {
+      headers: {
+        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const orders = response.data.orders;
+    const orderCount = orders.length;
+
+    if (orderCount >= Number(limit)) {
+      const oldestOrder = new Date(orders[0].created_at).getTime();
+      const nextAllowedTime = oldestOrder + hours * 60 * 60 * 1000;
+      const now = Date.now();
+      const waitSeconds = Math.max(0, Math.floor((nextAllowedTime - now) / 1000));
+
+      return res.json({
+        allowed: false,
+        wait_seconds: waitSeconds,
+        message: `⚠️ Limit reached. Please try again in ${Math.floor(waitSeconds / 60)} min.`
+      });
+    }
+
+    res.json({
+      allowed: true,
+      orderCount,
+      message: "✅ You're allowed to checkout."
+    });
+
+  } catch (err) {
+    console.error("Fetch Error:", err.message);
+    res.status(500).json({ allowed: false, reason: "server_error" });
+  }
+});
