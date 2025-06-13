@@ -66,10 +66,9 @@ app.use(cors());  // 👈 enable CORS for all origins
 
 const PORT = process.env.PORT || 3000;
 
-app.get('/api/orders/check', async (req, res) => {
+app.get('/api/orders/all', async (req, res) => {
   try {
-    const sinceTime = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
-    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
+    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json`;
 
     const response = await axios.get(url, {
       headers: {
@@ -78,32 +77,23 @@ app.get('/api/orders/check', async (req, res) => {
       }
     });
 
-    const orders = response.data.orders;
-    const orderCount = orders.length;
+    const orders = response.data.orders.map(order => ({
+      name: order.name,
+      email: order.email,
+      total_price: order.total_price,
+      created_at: order.created_at
+    }));
 
-    if (orderCount >= 10) {
-      return res.json({
-        allowed: false,
-        reason: "limit",
-        message: "⚠️ 10 orders already placed in the last 2 hours."
-      });
-    }
-
-    res.json({
-      allowed: true,
-      orderCount,
-      message: "✅ You're allowed to checkout."
-    });
+    res.json({ orders });
 
   } catch (error) {
-    console.error("Error checking orders:", error.message);
+    console.error("Error fetching all orders:", error.message);
     res.status(500).json({
-      allowed: false,
-      reason: "server_error",
-      message: "⚠️ Error while checking order status"
+      error: "❌ Failed to fetch orders"
     });
   }
 });
+
 
 app.get("/", (req, res) => {
   res.send("🟢 Order check service is running.");
