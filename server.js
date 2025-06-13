@@ -169,7 +169,7 @@ if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
 // ✅ Ping route for frontend check
 app.get('/api/ping', (req, res) => {
   console.log("📶 /api/ping route called");
-  res.json({ success: true, message: "🟢 Server is running from Node.js" });
+  res.json({ success: true, message: "🟢 Server is running from Node.js Alok patel" });
 });
 
 // 🧪 Scope Check: test Admin API permissions
