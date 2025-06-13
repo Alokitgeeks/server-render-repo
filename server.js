@@ -257,7 +257,9 @@ app.get('/api/check-scope', async (req, res) => {
   }
 });
 
-
+app.get('/api/ping', (req, res) => {
+  res.json({ success: true, message: "🟢 Server is running from Node.js" });
+});
 
 app.get("/", (req, res) => {
   res.send("🟢 Order service is running.");
