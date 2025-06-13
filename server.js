@@ -229,6 +229,36 @@ app.get('/api/orders/check', async (req, res) => {
   }
 });
 
+
+app.get('/api/check-scope', async (req, res) => {
+  try {
+    const response = await axios.get(`https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/shop.json`, {
+      headers: {
+        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log("✅ Scope Test Success:", response.data.shop);
+    res.json({
+      success: true,
+      shopName: response.data.shop.name,
+      email: response.data.shop.email,
+      domain: response.data.shop.domain,
+      message: "✅ Admin API credentials are working!"
+    });
+  } catch (error) {
+    console.error("❌ Admin API Scope Error:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "❌ Admin API credentials or scope may be incorrect.",
+      error: error.message
+    });
+  }
+});
+
+
+
 app.get("/", (req, res) => {
   res.send("🟢 Order service is running.");
 });
