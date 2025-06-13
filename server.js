@@ -146,97 +146,42 @@
 // });
 
 
-
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(express.json());
 app.use(cors());
 
-const PORT = process.env.PORT || 3000;
+// 🔐 Verify environment variables
+const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
 
-// Get all orders
-app.get('/api/orders/all', async (req, res) => {
-  try {
-    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json`;
+if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
+  console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
+  process.exit(1); // Stop server if not configured
+}
 
-    const response = await axios.get(url, {
-      headers: {
-        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const orders = response.data.orders.map(order => ({
-      name: order.name,
-      email: order.email,
-      total_price: order.total_price,
-      created_at: order.created_at
-    }));
-
-    res.json({ orders });
-
-  } catch (error) {
-    console.error("Error fetching all orders:", error.message);
-    res.status(500).json({ error: "❌ Failed to fetch orders" });
-  }
+// ✅ Ping route for frontend check
+app.get('/api/ping', (req, res) => {
+  console.log("📶 /api/ping route called");
+  res.json({ success: true, message: "🟢 Server is running from Node.js" });
 });
 
-// Check order limit
-app.get('/api/orders/check', async (req, res) => {
-  try {
-    const limit = Number(req.query.limit || 5);
-    const hours = Number(req.query.hours || 2);
-
-    const sinceTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
-
-    const response = await axios.get(url, {
-      headers: {
-        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    const orders = response.data.orders;
-    const orderCount = orders.length;
-
-    if (orderCount >= limit) {
-      const oldestOrder = new Date(orders[0].created_at).getTime();
-      const nextAllowedTime = oldestOrder + hours * 60 * 60 * 1000;
-      const now = Date.now();
-      const waitSeconds = Math.max(0, Math.floor((nextAllowedTime - now) / 1000));
-
-      return res.json({
-        allowed: false,
-        wait_seconds: waitSeconds,
-        message: `⚠️ Limit reached. Try again in ${Math.floor(waitSeconds / 60)} min.`
-      });
-    }
-
-    res.json({
-      allowed: true,
-      orderCount,
-      message: "✅ You're allowed to checkout."
-    });
-
-  } catch (err) {
-    console.error("Fetch Error:", err.message);
-    res.status(500).json({ allowed: false, reason: "server_error" });
-  }
-});
-
-
+// 🧪 Scope Check: test Admin API permissions
 app.get('/api/check-scope', async (req, res) => {
   try {
-    const response = await axios.get(`https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/shop.json`, {
+    const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/shop.json`;
+
+    const response = await axios.get(url, {
       headers: {
-        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-        'Content-Type': 'application/json'
-      }
+        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json',
+      },
     });
 
     console.log("✅ Scope Test Success:", response.data.shop);
@@ -245,26 +190,94 @@ app.get('/api/check-scope', async (req, res) => {
       shopName: response.data.shop.name,
       email: response.data.shop.email,
       domain: response.data.shop.domain,
-      message: "✅ Admin API credentials are working!"
+      message: "✅ Admin API credentials are working!",
     });
   } catch (error) {
     console.error("❌ Admin API Scope Error:", error.message);
     res.status(500).json({
       success: false,
       message: "❌ Admin API credentials or scope may be incorrect.",
-      error: error.message
+      error: error.message,
     });
   }
 });
 
-app.get('/api/ping', (req, res) => {
-  res.json({ success: true, message: "🟢 Server is running from Node.js" });
+// 📦 Fetch all orders
+app.get('/api/orders/all', async (req, res) => {
+  try {
+    const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json`;
+
+    const response = await axios.get(url, {
+      headers: {
+        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const orders = response.data.orders.map(order => ({
+      name: order.name,
+      email: order.email,
+      total_price: order.total_price,
+      created_at: order.created_at,
+    }));
+
+    console.log(`📦 Retrieved ${orders.length} orders`);
+    res.json({ orders });
+  } catch (error) {
+    console.error("❌ Error fetching all orders:", error.message);
+    res.status(500).json({ error: "❌ Failed to fetch orders" });
+  }
 });
 
+// ⏳ Order limit logic
+app.get('/api/orders/check', async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 5);
+    const hours = Number(req.query.hours || 2);
+    const sinceTime = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+    const url = `https://${SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
+
+    const response = await axios.get(url, {
+      headers: {
+        'X-Shopify-Access-Token': SHOPIFY_ACCESS_TOKEN,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const orders = response.data.orders || [];
+    const orderCount = orders.length;
+
+    if (orderCount >= limit) {
+      const oldestOrder = new Date(orders[0].created_at).getTime();
+      const nextAllowedTime = oldestOrder + hours * 3600 * 1000;
+      const now = Date.now();
+      const waitSeconds = Math.max(0, Math.floor((nextAllowedTime - now) / 1000));
+
+      return res.json({
+        allowed: false,
+        wait_seconds: waitSeconds,
+        message: `⚠️ Limit reached. Try again in ${Math.floor(waitSeconds / 60)} min.`,
+      });
+    }
+
+    res.json({
+      allowed: true,
+      orderCount,
+      message: "✅ You're allowed to checkout.",
+    });
+  } catch (error) {
+    console.error("❌ Error in /api/orders/check:", error.message);
+    res.status(500).json({ allowed: false, reason: "server_error" });
+  }
+});
+
+// Default route
 app.get("/", (req, res) => {
   res.send("🟢 Order service is running.");
 });
 
+// Start server
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
