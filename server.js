@@ -272,6 +272,57 @@ app.get('/api/orders/check', async (req, res) => {
   }
 });
 
+app.get('/api/slots/available', async (req, res) => {
+  try {
+    const { date } = req.query;
+    const maxOrder = parseInt(process.env.SLOT_MAX_ORDER || '10');
+    const slotGapMinutes = parseInt(process.env.SLOT_GAP_MINUTES || '60'); // e.g., 60 minutes
+
+    if (!date) return res.status(400).json({ error: 'Date is required' });
+
+    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${date}T00:00:00Z&created_at_max=${date}T23:59:59Z`;
+    const response = await axios.get(url, {
+      headers: {
+        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN
+      }
+    });
+
+    const orders = response.data.orders;
+
+    const slotMap = {};
+
+    for (let order of orders) {
+      const deliveryTime = order.note_attributes.find(attr => attr.name === 'Delivery Time')?.value;
+      const deliveryDate = order.note_attributes.find(attr => attr.name === 'Delivery Date')?.value;
+
+      if (deliveryDate === date && deliveryTime) {
+        const key = deliveryTime;
+        slotMap[key] = (slotMap[key] || 0) + 1;
+      }
+    }
+
+    const startHour = 9;
+    const endHour = 21;
+    const availableSlots = [];
+
+    for (let hour = startHour; hour < endHour; hour += slotGapMinutes / 60) {
+      const slotTime = `${String(hour).padStart(2, '0')}:00`;
+      if ((slotMap[slotTime] || 0) < maxOrder) {
+        availableSlots.push(slotTime);
+      }
+    }
+
+    res.json({ availableSlots });
+
+  } catch (err) {
+    console.error('Slot API Error:', err.message);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
+
+
 // Default route
 app.get("/", (req, res) => {
   res.send("🟢 Order service is running.");
