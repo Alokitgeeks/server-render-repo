@@ -272,11 +272,61 @@ app.get('/api/orders/check', async (req, res) => {
   }
 });
 
+// app.get('/api/slots/available', async (req, res) => {
+//   try {
+//     const { date } = req.query;
+//     const maxOrder = parseInt(process.env.SLOT_MAX_ORDER || '10');
+//     const slotGapMinutes = parseInt(process.env.SLOT_GAP_MINUTES || '60'); // e.g., 60 minutes
+
+//     if (!date) return res.status(400).json({ error: 'Date is required' });
+
+//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${date}T00:00:00Z&created_at_max=${date}T23:59:59Z`;
+//     const response = await axios.get(url, {
+//       headers: {
+//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN
+//       }
+//     });
+
+//     const orders = response.data.orders;
+
+//     const slotMap = {};
+
+//     for (let order of orders) {
+//       const deliveryTime = order.note_attributes.find(attr => attr.name === 'Delivery Time')?.value;
+//       const deliveryDate = order.note_attributes.find(attr => attr.name === 'Delivery Date')?.value;
+
+//       if (deliveryDate === date && deliveryTime) {
+//         const key = deliveryTime;
+//         slotMap[key] = (slotMap[key] || 0) + 1;
+//       }
+//     }
+
+//     const startHour = 9;
+//     const endHour = 21;
+//     const availableSlots = [];
+
+//     for (let hour = startHour; hour < endHour; hour += slotGapMinutes / 60) {
+//       const slotTime = `${String(hour).padStart(2, '0')}:00`;
+//       if ((slotMap[slotTime] || 0) < maxOrder) {
+//         availableSlots.push(slotTime);
+//       }
+//     }
+
+//     res.json({ availableSlots });
+
+//   } catch (err) {
+//     console.error('Slot API Error:', err.message);
+//     res.status(500).json({ error: 'Internal Server Error' });
+//   }
+// });
+
+
 app.get('/api/slots/available', async (req, res) => {
   try {
-    const { date } = req.query;
-    const maxOrder = parseInt(process.env.SLOT_MAX_ORDER || '10');
-    const slotGapMinutes = parseInt(process.env.SLOT_GAP_MINUTES || '60'); // e.g., 60 minutes
+    const { date, limit, gap } = req.query;
+
+    const maxOrder = Number(limit || 10);          // 🟡 Max order per slot
+    const slotGapMinutes = Number(gap || 60);      // 🟡 Gap between slots in minutes
 
     if (!date) return res.status(400).json({ error: 'Date is required' });
 
@@ -296,19 +346,43 @@ app.get('/api/slots/available', async (req, res) => {
       const deliveryDate = order.note_attributes.find(attr => attr.name === 'Delivery Date')?.value;
 
       if (deliveryDate === date && deliveryTime) {
-        const key = deliveryTime;
-        slotMap[key] = (slotMap[key] || 0) + 1;
+        slotMap[deliveryTime] = (slotMap[deliveryTime] || 0) + 1;
       }
     }
 
     const startHour = 9;
     const endHour = 21;
+
+    const now = new Date();
+    const currentDateStr = now.toISOString().split('T')[0];
+    const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+
     const availableSlots = [];
 
-    for (let hour = startHour; hour < endHour; hour += slotGapMinutes / 60) {
-      const slotTime = `${String(hour).padStart(2, '0')}:00`;
-      if ((slotMap[slotTime] || 0) < maxOrder) {
-        availableSlots.push(slotTime);
+    for (let mins = startHour * 60; mins < endHour * 60; mins += slotGapMinutes) {
+      const hour = Math.floor(mins / 60);
+      const min = mins % 60;
+      const timeStr24 = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+
+      const hour12 = hour % 12 || 12;
+      const ampm = hour < 12 ? 'AM' : 'PM';
+      const timeStr12 = `${hour12}:${String(min).padStart(2, '0')} ${ampm}`;
+
+      const slotIsFull = (slotMap[timeStr24] || 0) >= maxOrder;
+
+      // 🟥 Skip past time slots if date is today
+      if (date === currentDateStr && mins <= currentTimeMinutes) continue;
+
+      // 🟥 Skip blocked slots after max-order is hit
+      const shouldBlockSlot = Object.keys(slotMap).some(slot => {
+        const [h, m] = slot.split(':');
+        const bookedMins = parseInt(h) * 60 + parseInt(m);
+        const slotOrders = slotMap[slot];
+        return slotOrders >= maxOrder && mins < bookedMins + slotGapMinutes;
+      });
+
+      if (!slotIsFull && !shouldBlockSlot) {
+        availableSlots.push({ value: timeStr24, label: timeStr12 });
       }
     }
 
@@ -319,6 +393,9 @@ app.get('/api/slots/available', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
+
+
 
 
 app.get('/slots/available', async (req, res) => {
