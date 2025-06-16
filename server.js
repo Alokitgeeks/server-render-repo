@@ -321,7 +321,13 @@ app.get('/api/slots/available', async (req, res) => {
 });
 
 
+app.get('/slots/available', async (req, res) => {
+  const date = req.query.date;
+  if (!date) return res.status(400).json({ error: 'Missing date parameter' });
 
+  const exampleSlots = ['10:00', '11:00', '12:00'];
+  return res.json({ availableSlots: exampleSlots });
+});
 
 // Default route
 app.get("/", (req, res) => {
