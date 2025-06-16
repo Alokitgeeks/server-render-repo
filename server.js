@@ -219,6 +219,7 @@ app.get('/api/orders/all', async (req, res) => {
       email: order.email,
       total_price: order.total_price,
       created_at: order.created_at,
+      note_attributes: order.note_attributes || [], 
     }));
 
     console.log(`📦 Retrieved ${orders.length} orders`);
