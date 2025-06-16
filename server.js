@@ -325,9 +325,8 @@ app.get('/api/orders/check', async (req, res) => {
 app.get('/api/slots/available', async (req, res) => {
   try {
     const { date, limit, gap } = req.query;
-
-    const maxOrder = Number(limit || 10);          // 🟡 Max order per slot
-    const slotGapMinutes = Number(gap || 60);      // 🟡 Gap between slots in minutes
+    const maxOrder = Number(limit || 10);
+    const slotGapMinutes = Number(gap || 60);
 
     if (!date) return res.status(400).json({ error: 'Date is required' });
 
@@ -339,7 +338,6 @@ app.get('/api/slots/available', async (req, res) => {
     });
 
     const orders = response.data.orders;
-
     const slotMap = {};
 
     for (let order of orders) {
@@ -360,30 +358,37 @@ app.get('/api/slots/available', async (req, res) => {
 
     const availableSlots = [];
 
-    for (let mins = startHour * 60; mins < endHour * 60; mins += slotGapMinutes) {
-      const hour = Math.floor(mins / 60);
-      const min = mins % 60;
-      const timeStr24 = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    for (let mins = startHour * 60; mins + slotGapMinutes <= endHour * 60; mins += slotGapMinutes) {
+      const startHourSlot = Math.floor(mins / 60);
+      const startMinSlot = mins % 60;
+      const endMins = mins + slotGapMinutes;
+      const endHourSlot = Math.floor(endMins / 60);
+      const endMinSlot = endMins % 60;
 
-      const hour12 = hour % 12 || 12;
-      const ampm = hour < 12 ? 'AM' : 'PM';
-      const timeStr12 = `${hour12}:${String(min).padStart(2, '0')} ${ampm}`;
+      const slotStartStr = `${String(startHourSlot).padStart(2, '0')}:${String(startMinSlot).padStart(2, '0')}`;
+      const slotEndStr = `${String(endHourSlot).padStart(2, '0')}:${String(endMinSlot).padStart(2, '0')}`;
 
-      const slotIsFull = (slotMap[timeStr24] || 0) >= maxOrder;
+      const hour12Start = startHourSlot % 12 || 12;
+      const ampmStart = startHourSlot < 12 ? 'AM' : 'PM';
+      const hour12End = endHourSlot % 12 || 12;
+      const ampmEnd = endHourSlot < 12 ? 'AM' : 'PM';
 
-      // 🟥 Skip past time slots if date is today
-      if (date === currentDateStr && mins <= currentTimeMinutes) continue;
+      const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
 
-      // 🟥 Skip blocked slots after max-order is hit
-      const shouldBlockSlot = Object.keys(slotMap).some(slot => {
-        const [h, m] = slot.split(':');
-        const bookedMins = parseInt(h) * 60 + parseInt(m);
-        const slotOrders = slotMap[slot];
-        return slotOrders >= maxOrder && mins < bookedMins + slotGapMinutes;
+      // Skip if slot is in the past and date is today
+      if (date === currentDateStr && endMins <= currentTimeMinutes) continue;
+
+      const slotIsFull = Object.keys(slotMap).some(time => {
+        const [h, m] = time.split(':');
+        const timeMins = parseInt(h) * 60 + parseInt(m);
+        return timeMins >= mins && timeMins < endMins && slotMap[time] >= maxOrder;
       });
 
-      if (!slotIsFull && !shouldBlockSlot) {
-        availableSlots.push({ value: timeStr24, label: timeStr12 });
+      if (!slotIsFull) {
+        availableSlots.push({
+          value: `${slotStartStr} - ${slotEndStr}`,
+          label: timeStr12
+        });
       }
     }
 
