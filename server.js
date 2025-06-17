@@ -357,32 +357,37 @@ app.get('/api/slots/available', async (req, res) => {
 
 
 // GET /api/slots/available
-app.get('/api/slots-multiple/available', async (req, res) => {
+app.get('/api/slots-new/available', async (req, res) => {
   try {
-    const date = req.query.date;
-    if (!date) return res.status(400).json({ error: 'Date is required' });
+    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+    const accessToken = process.env.SHOPIFY_ACCESS_TOKEN;
 
-    const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${date}T00:00:00Z&created_at_max=${date}T23:59:59Z`;
+    const now = new Date();
+    const currentDateStr = now.toISOString().split('T')[0];
+
+    const url = `https://${storeDomain}/admin/api/2024-01/orders.json?created_at_min=${currentDateStr}T00:00:00Z&created_at_max=${currentDateStr}T23:59:59Z`;
+
     const response = await axios.get(url, {
       headers: {
-        'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN
+        'X-Shopify-Access-Token': accessToken
       }
     });
 
-    const orders = response.data.orders || [];
-
+    const orders = response.data.orders;
     const slotCounts = {};
-    for (let order of orders) {
-      const deliveryTime = order.note_attributes?.find(attr => attr.name === 'Delivery Time')?.value;
+
+    for (const order of orders) {
+      const deliveryTime = order.note_attributes.find(attr => attr.name === 'Delivery Time')?.value;
       if (deliveryTime) {
         slotCounts[deliveryTime] = (slotCounts[deliveryTime] || 0) + 1;
       }
     }
 
-    return res.json({ orders, slotCounts }); // send raw orders + count map
+    res.json({ slotCounts });
+
   } catch (err) {
     console.error('Slot API Error:', err.message);
-    return res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
