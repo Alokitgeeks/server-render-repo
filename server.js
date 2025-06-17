@@ -273,54 +273,6 @@ app.get('/api/orders/check', async (req, res) => {
   }
 });
 
-// app.get('/api/slots/available', async (req, res) => {
-//   try {
-//     const { date } = req.query;
-//     const maxOrder = parseInt(process.env.SLOT_MAX_ORDER || '10');
-//     const slotGapMinutes = parseInt(process.env.SLOT_GAP_MINUTES || '60'); // e.g., 60 minutes
-
-//     if (!date) return res.status(400).json({ error: 'Date is required' });
-
-//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${date}T00:00:00Z&created_at_max=${date}T23:59:59Z`;
-//     const response = await axios.get(url, {
-//       headers: {
-//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN
-//       }
-//     });
-
-//     const orders = response.data.orders;
-
-//     const slotMap = {};
-
-//     for (let order of orders) {
-//       const deliveryTime = order.note_attributes.find(attr => attr.name === 'Delivery Time')?.value;
-//       const deliveryDate = order.note_attributes.find(attr => attr.name === 'Delivery Date')?.value;
-
-//       if (deliveryDate === date && deliveryTime) {
-//         const key = deliveryTime;
-//         slotMap[key] = (slotMap[key] || 0) + 1;
-//       }
-//     }
-
-//     const startHour = 9;
-//     const endHour = 21;
-//     const availableSlots = [];
-
-//     for (let hour = startHour; hour < endHour; hour += slotGapMinutes / 60) {
-//       const slotTime = `${String(hour).padStart(2, '0')}:00`;
-//       if ((slotMap[slotTime] || 0) < maxOrder) {
-//         availableSlots.push(slotTime);
-//       }
-//     }
-
-//     res.json({ availableSlots });
-
-//   } catch (err) {
-//     console.error('Slot API Error:', err.message);
-//     res.status(500).json({ error: 'Internal Server Error' });
-//   }
-// });
-
 
 // app.get('/api/slots/available', async (req, res) => {
 //   try {
@@ -375,9 +327,12 @@ app.get('/api/orders/check', async (req, res) => {
 
 //       const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
 
-//       // Skip if slot is in the past and date is today
-//       if (date === currentDateStr && endMins <= currentTimeMinutes) continue;
+//       // ✅ SKIP if slot has already ended and date is today
+//       if (date === currentDateStr && currentTimeMinutes >= endMins) {
+//         continue;
+//       }
 
+//       // ✅ SKIP if slot is already full
 //       const slotIsFull = Object.keys(slotMap).some(time => {
 //         const [h, m] = time.split(':');
 //         const timeMins = parseInt(h) * 60 + parseInt(m);
@@ -434,7 +389,7 @@ app.get('/api/slots/available', async (req, res) => {
     const currentDateStr = now.toISOString().split('T')[0];
     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
-    const availableSlots = [];
+    const allSlots = [];
 
     for (let mins = startHour * 60; mins + slotGapMinutes <= endHour * 60; mins += slotGapMinutes) {
       const startHourSlot = Math.floor(mins / 60);
@@ -453,34 +408,32 @@ app.get('/api/slots/available', async (req, res) => {
 
       const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
 
-      // ✅ SKIP if slot has already ended and date is today
-      if (date === currentDateStr && currentTimeMinutes >= endMins) {
-        continue;
-      }
+      // Condition 1: Time already passed
+      const isPast = (date === currentDateStr && endMins <= currentTimeMinutes);
 
-      // ✅ SKIP if slot is already full
-      const slotIsFull = Object.keys(slotMap).some(time => {
+      // Condition 2: Slot full
+      const isFull = Object.keys(slotMap).some(time => {
         const [h, m] = time.split(':');
         const timeMins = parseInt(h) * 60 + parseInt(m);
         return timeMins >= mins && timeMins < endMins && slotMap[time] >= maxOrder;
       });
 
-      if (!slotIsFull) {
-        availableSlots.push({
-          value: `${slotStartStr} - ${slotEndStr}`,
-          label: timeStr12
-        });
-      }
+      const disabled = isPast || isFull;
+
+      allSlots.push({
+        value: `${slotStartStr} - ${slotEndStr}`,
+        label: timeStr12,
+        disabled
+      });
     }
 
-    res.json({ availableSlots });
+    res.json({ slots: allSlots });
 
   } catch (err) {
     console.error('Slot API Error:', err.message);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
-
 
 
 
