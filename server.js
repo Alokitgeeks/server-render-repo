@@ -274,87 +274,6 @@ app.get('/api/orders/check', async (req, res) => {
 });
 
 
-// app.get('/api/slots/available', async (req, res) => {
-//   try {
-//     const { date, limit, gap } = req.query;
-//     const maxOrder = Number(limit || 10);
-//     const slotGapMinutes = Number(gap || 60);
-
-//     if (!date) return res.status(400).json({ error: 'Date is required' });
-
-//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${date}T00:00:00Z&created_at_max=${date}T23:59:59Z`;
-//     const response = await axios.get(url, {
-//       headers: {
-//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN
-//       }
-//     });
-
-//     const orders = response.data.orders;
-//     const slotMap = {};
-
-//     for (let order of orders) {
-//       const deliveryTime = order.note_attributes.find(attr => attr.name === 'Delivery Time')?.value;
-//       const deliveryDate = order.note_attributes.find(attr => attr.name === 'Delivery Date')?.value;
-
-//       if (deliveryDate === date && deliveryTime) {
-//         slotMap[deliveryTime] = (slotMap[deliveryTime] || 0) + 1;
-//       }
-//     }
-
-//     const startHour = 9;
-//     const endHour = 21;
-
-//     const now = new Date();
-//     const currentDateStr = now.toISOString().split('T')[0];
-//     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
-
-//     const availableSlots = [];
-
-//     for (let mins = startHour * 60; mins + slotGapMinutes <= endHour * 60; mins += slotGapMinutes) {
-//       const startHourSlot = Math.floor(mins / 60);
-//       const startMinSlot = mins % 60;
-//       const endMins = mins + slotGapMinutes;
-//       const endHourSlot = Math.floor(endMins / 60);
-//       const endMinSlot = endMins % 60;
-
-//       const slotStartStr = `${String(startHourSlot).padStart(2, '0')}:${String(startMinSlot).padStart(2, '0')}`;
-//       const slotEndStr = `${String(endHourSlot).padStart(2, '0')}:${String(endMinSlot).padStart(2, '0')}`;
-
-//       const hour12Start = startHourSlot % 12 || 12;
-//       const ampmStart = startHourSlot < 12 ? 'AM' : 'PM';
-//       const hour12End = endHourSlot % 12 || 12;
-//       const ampmEnd = endHourSlot < 12 ? 'AM' : 'PM';
-
-//       const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
-
-//       // ✅ SKIP if slot has already ended and date is today
-//       if (date === currentDateStr && currentTimeMinutes >= endMins) {
-//         continue;
-//       }
-
-//       // ✅ SKIP if slot is already full
-//       const slotIsFull = Object.keys(slotMap).some(time => {
-//         const [h, m] = time.split(':');
-//         const timeMins = parseInt(h) * 60 + parseInt(m);
-//         return timeMins >= mins && timeMins < endMins && slotMap[time] >= maxOrder;
-//       });
-
-//       if (!slotIsFull) {
-//         availableSlots.push({
-//           value: `${slotStartStr} - ${slotEndStr}`,
-//           label: timeStr12
-//         });
-//       }
-//     }
-
-//     res.json({ availableSlots });
-
-//   } catch (err) {
-//     console.error('Slot API Error:', err.message);
-//     res.status(500).json({ error: 'Internal Server Error' });
-//   }
-// });
-
 app.get('/api/slots/available', async (req, res) => {
   try {
     const { date, limit, gap } = req.query;
@@ -389,7 +308,7 @@ app.get('/api/slots/available', async (req, res) => {
     const currentDateStr = now.toISOString().split('T')[0];
     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
-    const allSlots = [];
+    const availableSlots = [];
 
     for (let mins = startHour * 60; mins + slotGapMinutes <= endHour * 60; mins += slotGapMinutes) {
       const startHourSlot = Math.floor(mins / 60);
@@ -408,26 +327,27 @@ app.get('/api/slots/available', async (req, res) => {
 
       const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
 
-      // Condition 1: Time already passed
-      const isPast = (date === currentDateStr && endMins <= currentTimeMinutes);
+      // ✅ SKIP if slot has already ended and date is today
+      if (date === currentDateStr && currentTimeMinutes >= endMins) {
+        continue;
+      }
 
-      // Condition 2: Slot full
-      const isFull = Object.keys(slotMap).some(time => {
+      // ✅ SKIP if slot is already full
+      const slotIsFull = Object.keys(slotMap).some(time => {
         const [h, m] = time.split(':');
         const timeMins = parseInt(h) * 60 + parseInt(m);
         return timeMins >= mins && timeMins < endMins && slotMap[time] >= maxOrder;
       });
 
-      const disabled = isPast || isFull;
-
-      allSlots.push({
-        value: `${slotStartStr} - ${slotEndStr}`,
-        label: timeStr12,
-        disabled
-      });
+      if (!slotIsFull) {
+        availableSlots.push({
+          value: `${slotStartStr} - ${slotEndStr}`,
+          label: timeStr12
+        });
+      }
     }
 
-    res.json({ slots: allSlots });
+    res.json({ availableSlots });
 
   } catch (err) {
     console.error('Slot API Error:', err.message);
