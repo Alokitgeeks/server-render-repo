@@ -328,7 +328,10 @@ app.get('/api/slots/available', async (req, res) => {
       const timeStr12 = `${hour12Start}:${String(startMinSlot).padStart(2, '0')} ${ampmStart} - ${hour12End}:${String(endMinSlot).padStart(2, '0')} ${ampmEnd}`;
 
       // ✅ SKIP if slot has already ended and date is today
-      if (date === currentDateStr && currentTimeMinutes >= endMins) {
+      // if (date === currentDateStr && currentTimeMinutes >= endMins) {
+      //   continue;
+      // }
+      if (date === currentDateStr && endMins <= currentTimeMinutes) {
         continue;
       }
 
