@@ -149,9 +149,14 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const WebSocket = require('ws');
+const http = require('http');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
 const PORT = process.env.PORT || 3000;
 
 // Middleware
@@ -165,6 +170,45 @@ if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
   console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
   process.exit(1); // Stop server if not configured
 }
+
+let clients = [];
+
+
+wss.on('connection', (ws) => {
+  console.log("✅ New WebSocket connection");
+  clients.push(ws);
+
+  ws.on('close', () => {
+    clients = clients.filter(client => client !== ws);
+  });
+});
+
+// 📡 Broadcast function
+const broadcastToClients = (data) => {
+  const msg = JSON.stringify(data);
+  clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(msg);
+    }
+  });
+};
+
+// 🚀 Shopify Webhook Listener for Order Creation
+app.post('/webhook/order-created', (req, res) => {
+  const order = req.body;
+  console.log("🛒 Order created:", order?.id);
+
+  // ✅ Send to all frontend clients
+  broadcastToClients({
+    event: 'orderCreated',
+    orderId: order?.id,
+    created_at: order?.created_at,
+  });
+
+  res.status(200).send("Webhook received");
+});
+
+
 
 // ✅ Ping route for frontend check
 app.get('/api/ping', (req, res) => {
