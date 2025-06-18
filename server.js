@@ -194,7 +194,7 @@ const broadcastToClients = (data) => {
 };
 
 // 🚀 Shopify Webhook Listener for Order Creation
-app.post('/webhook/order-created', (req, res) => {
+app.post('/webhook/order-created', (req, res) => { 
   const order = req.body;
   console.log("🛒 Order created:", order?.id);
 
