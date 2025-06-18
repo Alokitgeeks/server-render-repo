@@ -147,6 +147,8 @@
 
 
 const express = require('express');
+const bodyParser = require('body-parser');
+const crypto = require('crypto');
 const axios = require('axios');
 const cors = require('cors');
 const WebSocket = require('ws');
@@ -158,10 +160,13 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
+const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
 
 // Middleware
 app.use(express.json());
 app.use(cors());
+app.use(bodyParser.json({ type: 'application/json' }));
+
 
 // 🔐 Verify environment variables
 const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
@@ -171,41 +176,51 @@ if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
   process.exit(1); // Stop server if not configured
 }
 
-let clients = [];
+// 🧠 Helper to verify Shopify signature
+function verifyShopifyWebhook(req, res, buf) {
+  const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
+  const generatedHmac = crypto
+    .createHmac('sha256', SHOPIFY_WEBHOOK_SECRET)
+    .update(buf, 'utf8')
+    .digest('base64');
 
+  if (generatedHmac !== hmacHeader) {
+    console.log("❌ Invalid webhook signature");
+    return false;
+  }
+  return true;
+}
 
-wss.on('connection', (ws) => {
-  console.log("✅ New WebSocket connection");
-  clients.push(ws);
+// 🎯 Webhook endpoint for order creation
+app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
+  const isValid = verifyShopifyWebhook(req, res, req.body);
 
-  ws.on('close', () => {
-    clients = clients.filter(client => client !== ws);
-  });
-});
+  if (!isValid) return res.status(401).send('Unauthorized');
 
-// 📡 Broadcast function
-const broadcastToClients = (data) => {
-  const msg = JSON.stringify(data);
-  clients.forEach(client => {
+  const rawBody = req.body.toString('utf8');
+  const orderData = JSON.parse(rawBody);
+
+  console.log("✅ Order received:", orderData.id);
+
+  // 🔁 Broadcast to all connected WebSocket clients
+  wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(msg);
+      client.send(JSON.stringify({ event: 'orderCreated', orderId: orderData.id }));
     }
   });
-};
 
-// 🚀 Shopify Webhook Listener for Order Creation
-app.post('/webhook/order-created', (req, res) => { 
-  const order = req.body;
-  console.log("🛒 Order created:", order?.id);
+  res.status(200).send('Webhook received');
+});
 
-  // ✅ Send to all frontend clients
-  broadcastToClients({
-    event: 'orderCreated',
-    orderId: order?.id,
-    created_at: order?.created_at,
+// 🌐 WebSocket connection
+wss.on('connection', (socket) => {
+  console.log('🔌 New WebSocket connection');
+
+  socket.send(JSON.stringify({ event: 'connected' }));
+
+  socket.on('close', () => {
+    console.log('❌ WebSocket client disconnected');
   });
-
-  res.status(200).send("Webhook received");
 });
 
 
