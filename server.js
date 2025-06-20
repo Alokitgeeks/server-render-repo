@@ -1,158 +1,42 @@
 // const express = require('express');
+// const bodyParser = require('body-parser');
+// const crypto = require('crypto');
 // const axios = require('axios');
+// const cors = require('cors');
+// const WebSocket = require('ws');
+// const http = require('http');
 // require('dotenv').config();
 
 // const app = express();
-// app.use(express.json());
+// const server = http.createServer(app);
+// const wss = new WebSocket.Server({ server });
 
 // const PORT = process.env.PORT || 3000;
+// const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
+// const fs = require('fs');
+// const path = require('path');
 
-// app.get('/api/orders/check', async (req, res) => {
-//   try {
-//     const sinceTime = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(); // 2 hours ago
-//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
-
-//     const response = await axios.get(url, {
-//       headers: {
-//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-//         'Content-Type': 'application/json'
-//       }
-//     });
-
-//     const orders = response.data.orders;
-//     const orderCount = orders.length;
-
-//     if (orderCount >= 10) {
-//       return res.json({
-//         allowed: false,
-//         reason: "limit",
-//         message: "⚠️ 10 orders already placed in the last 2 hours."
-//       });
-//     }
-
-//     res.json({
-//       allowed: true,
-//       orderCount,
-//       message: "✅ You're allowed to checkout."
-//     });
-
-//   } catch (error) {
-//     console.error("Error checking orders:", error.message);
-//     res.status(500).json({
-//       allowed: false,
-//       reason: "server_error",
-//       message: "⚠️ Error while checking order status"
-//     });
-//   }
-// });
-
-// app.get("/", (req, res) => {
-//   res.send("🟢 Order check service is running.");
-// });
-
-// app.listen(PORT, () => {
-//   console.log(`✅ Server running on port ${PORT}`);
-// });
-
-
-// const express = require('express');
-// const axios = require('axios');
-// const cors = require('cors');  // 👈 add this
-// require('dotenv').config();
-
-// const app = express();
+// // Middleware
 // app.use(express.json());
-// app.use(cors());  // 👈 enable CORS for all origins
-
-// const PORT = process.env.PORT || 3000;
-
-// app.get('/api/orders/all', async (req, res) => {
-//   try {
-//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json`;
-
-//     const response = await axios.get(url, {
-//       headers: {
-//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-//         'Content-Type': 'application/json'
-//       }
-//     });
-
-//     const orders = response.data.orders.map(order => ({
-//       name: order.name,
-//       email: order.email,
-//       total_price: order.total_price,
-//       created_at: order.created_at
-//     }));
-
-//     res.json({ orders });
-
-//   } catch (error) {
-//     console.error("Error fetching all orders:", error.message);
-//     res.status(500).json({
-//       error: "❌ Failed to fetch orders"
-//     });
-//   }
-// });
+// app.use(cors());
+// app.use(bodyParser.json({ type: 'application/json' }));
 
 
-// app.get("/", (req, res) => {
-//   res.send("🟢 Order check service is running.");
-// });
+// // 🔐 Verify environment variables
+// const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
 
-// app.listen(PORT, () => {
-//   console.log(`✅ Server running on port ${PORT}`);
-// });
-
-// app.get('/api/orders/check', async (req, res) => {
-//   try {
-//     const { limit = 5, hours = 2 } = req.query;
-
-//     const sinceTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
-//     const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01/orders.json?created_at_min=${sinceTime}`;
-
-//     const response = await axios.get(url, {
-//       headers: {
-//         'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
-//         'Content-Type': 'application/json'
-//       }
-//     });
-
-//     const orders = response.data.orders;
-//     const orderCount = orders.length;
-
-//     if (orderCount >= Number(limit)) {
-//       const oldestOrder = new Date(orders[0].created_at).getTime();
-//       const nextAllowedTime = oldestOrder + hours * 60 * 60 * 1000;
-//       const now = Date.now();
-//       const waitSeconds = Math.max(0, Math.floor((nextAllowedTime - now) / 1000));
-
-//       return res.json({
-//         allowed: false,
-//         wait_seconds: waitSeconds,
-//         message: `⚠️ Limit reached. Please try again in ${Math.floor(waitSeconds / 60)} min.`
-//       });
-//     }
-
-//     res.json({
-//       allowed: true,
-//       orderCount,
-//       message: "✅ You're allowed to checkout."
-//     });
-
-//   } catch (err) {
-//     console.error("Fetch Error:", err.message);
-//     res.status(500).json({ allowed: false, reason: "server_error" });
-//   }
-// });
-
+// if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
+//   console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
+//   process.exit(1); // Stop server if not configured
+// }
 
 const express = require('express');
-const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const axios = require('axios');
 const cors = require('cors');
 const WebSocket = require('ws');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -160,69 +44,46 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
-const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
-const fs = require('fs');
-const path = require('path');
+const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET || 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
 
-// Middleware
-app.use(express.json());
+// Enable CORS for all origins (adjust if needed)
 app.use(cors());
-app.use(bodyParser.json({ type: 'application/json' }));
 
+// Webhook route - parse raw body for HMAC verification
+app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
+  req.rawBody = req.body;
 
-// 🔐 Verify environment variables
-const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
-
-if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
-  console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
-  process.exit(1); // Stop server if not configured
-}
-
-// 🧠 Helper to verify Shopify signature
-function verifyShopifyWebhook(req, res, buf) {
+  // Verify HMAC signature
   const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
   const generatedHmac = crypto
     .createHmac('sha256', SHOPIFY_WEBHOOK_SECRET)
-    .update(buf, 'utf8')
+    .update(req.rawBody, 'utf8')
     .digest('base64');
 
   if (generatedHmac !== hmacHeader) {
-    console.log("❌ Invalid webhook signature");
-    return false;
-  }
-  return true;
-}
-
-// 🎯 Webhook endpoint for order creation
-app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
-  console.log('test');
-  const logFilePath = path.join(__dirname, 'log.txt');
-
-  function logToFile(message) {
-    const timestamp = new Date().toISOString();
-    const fullMessage = `[${timestamp}] ${message}\n`;
-
-    fs.appendFile(logFilePath, fullMessage, (err) => {
-      if (err) {
-        console.error('❌ Failed to write to log file:', err);
-      }
-    });
+    console.log('❌ Invalid webhook signature');
+    return res.status(401).send('Unauthorized');
   }
 
-  // Example usage
-  logToFile('🟢 Server started');
-  logToFile('🔴 Error: Something went wrong!');
-  const isValid = verifyShopifyWebhook(req, res, req.body);
+  let orderData;
+  try {
+    orderData = JSON.parse(req.rawBody.toString('utf8'));
+  } catch (e) {
+    console.error('❌ Invalid JSON', e);
+    return res.status(400).send('Bad JSON');
+  }
 
-  if (!isValid) return res.status(401).send('Unauthorized');
+  console.log('✅ Order received:', orderData.id);
 
-  const rawBody = req.body.toString('utf8');
-  const orderData = JSON.parse(rawBody);
+  // Optional: log to file
+  const logFile = path.join(__dirname, 'orders.log');
+  const logMsg = `[${new Date().toISOString()}] Order ID: ${orderData.id}\n`;
+  fs.appendFile(logFile, logMsg, err => {
+    if (err) console.error('Log file error:', err);
+  });
 
-  console.log("✅ Order received:", orderData.id);
-
-  // 🔁 Broadcast to all connected WebSocket clients
-  wss.clients.forEach((client) => {
+  // Broadcast to WebSocket clients
+  wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ event: 'orderCreated', orderId: orderData.id }));
     }
@@ -231,17 +92,15 @@ app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (r
   res.status(200).send('Webhook received');
 });
 
-// 🌐 WebSocket connection
-wss.on('connection', (socket) => {
-  console.log('🔌 New WebSocket connection');
-
-  socket.send(JSON.stringify({ event: 'connected' }));
+// WebSocket connection setup
+wss.on('connection', socket => {
+  console.log('🔌 New WS client connected');
+  socket.send(JSON.stringify({ event: 'connected', message: 'Welcome!' }));
 
   socket.on('close', () => {
-    console.log('❌ WebSocket client disconnected');
+    console.log('❌ WS client disconnected');
   });
 });
-
 
 
 // ✅ Ping route for frontend check
