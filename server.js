@@ -1,42 +1,11 @@
-// const express = require('express');
-// const bodyParser = require('body-parser');
-// const crypto = require('crypto');
-// const axios = require('axios');
-// const cors = require('cors');
-// const WebSocket = require('ws');
-// const http = require('http');
-// require('dotenv').config();
-
-// const app = express();
-// const server = http.createServer(app);
-// const wss = new WebSocket.Server({ server });
-
-// const PORT = process.env.PORT || 3000;
-// const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
-// const fs = require('fs');
-// const path = require('path');
-
-// // Middleware
-// app.use(express.json());
-// app.use(cors());
-// app.use(bodyParser.json({ type: 'application/json' }));
-
-
-// // 🔐 Verify environment variables
-// const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
-
-// if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
-//   console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
-//   process.exit(1); // Stop server if not configured
-// }
 
 const express = require('express');
+const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const axios = require('axios');
 const cors = require('cors');
 const WebSocket = require('ws');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -44,46 +13,69 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
-const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET || 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
+const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
+const fs = require('fs');
+const path = require('path');
 
-// Enable CORS for all origins (adjust if needed)
+// Middleware
+app.use(express.json());
 app.use(cors());
+app.use(bodyParser.json({ type: 'application/json' }));
 
-// Webhook route - parse raw body for HMAC verification
-app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
-  req.rawBody = req.body;
 
-  // Verify HMAC signature
+// 🔐 Verify environment variables
+const { SHOPIFY_STORE_DOMAIN, SHOPIFY_ACCESS_TOKEN } = process.env;
+
+if (!SHOPIFY_STORE_DOMAIN || !SHOPIFY_ACCESS_TOKEN) {
+  console.error("❌ Missing SHOPIFY_STORE_DOMAIN or SHOPIFY_ACCESS_TOKEN in .env");
+  process.exit(1); // Stop server if not configured
+}
+
+// 🧠 Helper to verify Shopify signature
+function verifyShopifyWebhook(req, res, buf) {
   const hmacHeader = req.get('X-Shopify-Hmac-Sha256');
   const generatedHmac = crypto
     .createHmac('sha256', SHOPIFY_WEBHOOK_SECRET)
-    .update(req.rawBody, 'utf8')
+    .update(buf, 'utf8')
     .digest('base64');
 
   if (generatedHmac !== hmacHeader) {
-    console.log('❌ Invalid webhook signature');
-    return res.status(401).send('Unauthorized');
+    console.log("❌ Invalid webhook signature");
+    return false;
+  }
+  return true;
+}
+
+// 🎯 Webhook endpoint for order creation
+app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
+  console.log('test');
+  const logFilePath = path.join(__dirname, 'log.txt');
+
+  function logToFile(message) {
+    const timestamp = new Date().toISOString();
+    const fullMessage = `[${timestamp}] ${message}\n`;
+
+    fs.appendFile(logFilePath, fullMessage, (err) => {
+      if (err) {
+        console.error('❌ Failed to write to log file:', err);
+      }
+    });
   }
 
-  let orderData;
-  try {
-    orderData = JSON.parse(req.rawBody.toString('utf8'));
-  } catch (e) {
-    console.error('❌ Invalid JSON', e);
-    return res.status(400).send('Bad JSON');
-  }
+  // Example usage
+  logToFile('🟢 Server started');
+  logToFile('🔴 Error: Something went wrong!');
+  const isValid = verifyShopifyWebhook(req, res, req.body);
 
-  console.log('✅ Order received:', orderData.id);
+  if (!isValid) return res.status(401).send('Unauthorized');
 
-  // Optional: log to file
-  const logFile = path.join(__dirname, 'orders.log');
-  const logMsg = `[${new Date().toISOString()}] Order ID: ${orderData.id}\n`;
-  fs.appendFile(logFile, logMsg, err => {
-    if (err) console.error('Log file error:', err);
-  });
+  const rawBody = req.body.toString('utf8');
+  const orderData = JSON.parse(rawBody);
 
-  // Broadcast to WebSocket clients
-  wss.clients.forEach(client => {
+  console.log("✅ Order received:", orderData.id);
+
+  // 🔁 Broadcast to all connected WebSocket clients
+  wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({ event: 'orderCreated', orderId: orderData.id }));
     }
@@ -92,15 +84,17 @@ app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (r
   res.status(200).send('Webhook received');
 });
 
-// WebSocket connection setup
-wss.on('connection', socket => {
-  console.log('🔌 New WS client connected');
-  socket.send(JSON.stringify({ event: 'connected', message: 'Welcome!' }));
+// 🌐 WebSocket connection
+wss.on('connection', (socket) => {
+  console.log('🔌 New WebSocket connection');
+
+  socket.send(JSON.stringify({ event: 'connected' }));
 
   socket.on('close', () => {
-    console.log('❌ WS client disconnected');
+    console.log('❌ WebSocket client disconnected');
   });
 });
+
 
 
 // ✅ Ping route for frontend check
