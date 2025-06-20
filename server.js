@@ -161,6 +161,8 @@ const wss = new WebSocket.Server({ server });
 
 const PORT = process.env.PORT || 3000;
 const SHOPIFY_WEBHOOK_SECRET = 'e1eef09943ca60fa3aedb04f76569ab7b15bd105de4b9080e4fef7291985d6ca';
+const fs = require('fs');
+const path = require('path');
 
 // Middleware
 app.use(express.json());
@@ -193,6 +195,23 @@ function verifyShopifyWebhook(req, res, buf) {
 
 // 🎯 Webhook endpoint for order creation
 app.post('/webhook/order-created', express.raw({ type: 'application/json' }), (req, res) => {
+  console.log('test');
+  const logFilePath = path.join(__dirname, 'log.txt');
+
+  function logToFile(message) {
+    const timestamp = new Date().toISOString();
+    const fullMessage = `[${timestamp}] ${message}\n`;
+
+    fs.appendFile(logFilePath, fullMessage, (err) => {
+      if (err) {
+        console.error('❌ Failed to write to log file:', err);
+      }
+    });
+  }
+
+  // Example usage
+  logToFile('🟢 Server started');
+  logToFile('🔴 Error: Something went wrong!');
   const isValid = verifyShopifyWebhook(req, res, req.body);
 
   if (!isValid) return res.status(401).send('Unauthorized');
