@@ -322,7 +322,45 @@ app.get('/api/slots-new/available', async (req, res) => {
   }
 });
 
+const SHOPIFY_API = `https://${process.env.SHOPIFY_ACCESS_TOKEN}@${process.env.SHOPIFY_STORE_URL}/admin/api/2024-01`;
 
+const calculateAverage = (orders, daysBack) => {
+  const now = new Date();
+  const filtered = orders.filter(order => {
+    const created = new Date(order.created_at);
+    return created >= new Date(now - daysBack * 24 * 60 * 60 * 1000);
+  });
+
+  const durations = filtered.map(order => {
+    const fulfillments = order.fulfillments || [];
+    if (fulfillments.length === 0) return null;
+
+    const orderDate = new Date(order.created_at);
+    const fulfilledDate = new Date(fulfillments[0].created_at);
+    return (fulfilledDate - orderDate) / (1000 * 60 * 60 * 24); // in days
+  }).filter(Boolean);
+
+  const avg = durations.reduce((sum, d) => sum + d, 0) / durations.length;
+  return avg.toFixed(2);
+};
+
+app.get('/api/fulfillment-stats', async (req, res) => {
+  try {
+    const response = await axios.get(`${SHOPIFY_API}/orders.json?status=any&limit=250&fields=id,created_at,fulfillments`);
+    const orders = response.data.orders;
+
+    const avg7 = calculateAverage(orders, 7);
+    const avg30 = calculateAverage(orders, 30);
+
+    res.json({
+      average_7_days: `${avg7} days`,
+      average_30_days: `${avg30} days`
+    });
+  } catch (err) {
+    console.error('API Error:', err.response?.data || err.message);
+    res.status(500).json({ error: 'Failed to fetch orders.' });
+  }
+});
 
 
 
