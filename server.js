@@ -322,7 +322,7 @@ app.get('/api/slots-new/available', async (req, res) => {
   }
 });
 
-const SHOPIFY_API = `https://${process.env.SHOPIFY_ACCESS_TOKEN}@${process.env.SHOPIFY_STORE_URL}/admin/api/2024-01`;
+const SHOPIFY_API = `https://${process.env.SHOPIFY_ACCESS_TOKEN}@${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-01`;
 
 const calculateAverage = (orders, daysBack) => {
   const now = new Date();
